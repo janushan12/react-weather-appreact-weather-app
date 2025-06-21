@@ -11,4 +11,6 @@
   min-height: 100vh;
   display: grid;
   background: #e2d4ff;
+  background-image: url('./assets/rainy.jpg');
+  background-size: cover;
 }
