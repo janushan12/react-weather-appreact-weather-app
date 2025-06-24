@@ -10,13 +10,16 @@ import daily from "../assets/daily.png";
 // import cloudyIcon from "../assets/partly-cloudy.png";
 // import rainIcon from "../assets/rain.png";
 // import snowIcon from "../assets/snow.jpg";
-import clearIcon from "../assets/weather-clear.png";
+// import clearIcon from "../assets/weather-clear.png";
 import windIcon from "../assets/wind.png";
 
 const Weather = () => {
   const inputRef = useRef();
 
   const [weatherData, setWeatherData] = useState(false);
+  const [upcomingForecast, setUpcomingForecast] = useState([]);
+  const [tenDaysForecast, setTenDaysForecast] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
 
   const errorAlertShown = useRef(false);
 
@@ -25,10 +28,12 @@ const Weather = () => {
       alert("Enter a city name");
       return;
     }
+    setIsLoading(true);
+
     try {
-      const url = `http://api.weatherapi.com/v1/current.json?q=${city}&key=${
+      const url = `http://api.weatherapi.com/v1/forecast.json?q=${city}&key=${
         import.meta.env.VITE_API
-      }`;
+      }&days=10`;
       const response = await fetch(url);
       const data = await response.json();
 
@@ -53,8 +58,43 @@ const Weather = () => {
         icon: data.current.condition.icon,
         text: data.current.condition.text,
       });
+
+      //Forecast Details
+      // Combine today & tomorrow's hourly forecast
+      const hourlyDataToday = data.forecast.forecastday[0].hour;
+      const hourlyDataTomorrow = data.forecast.forecastday[1]?.hour || [];
+      const allHoursData = [...hourlyDataToday, ...hourlyDataTomorrow];
+
+      // Get current time
+      const now = new Date();
+
+      // Format current time to match weatherAPI time string: "YYYY-MM-DD HH:00"
+      const pad = (n) => n.toString().padStart(2, "0");
+      const nextHourDate = new Date(now.getTime() + 60 * 60 * 1000); // +1 hour
+      const nextHourStr = `${nextHourDate.getFullYear()}-${pad(
+        nextHourDate.getMonth() + 1
+      )}-${pad(nextHourDate.getDate())} ${pad(nextHourDate.getHours())}:00`;
+
+      //FInd the index in the full hourly array
+      const startIndex = allHoursData.findIndex(
+        (item) => item.time === nextHourStr
+      );
+
+      // Slice 10 hours from that point
+      const upcomingHourlyForecast =
+        startIndex !== -1
+          ? allHoursData.slice(startIndex, startIndex + 10)
+          : [];
+      setUpcomingForecast(upcomingHourlyForecast);
+
+      // 10 Days Forecast
+      setTenDaysForecast(data.forecast.forecastday);
+      // console.log(data.forecast.forecastday[0].date)
     } catch (error) {
       console.log(error.message);
+    } finally {
+      setIsLoading(false);
+      inputRef.current.value = ""; 
     }
   };
 
@@ -64,6 +104,11 @@ const Weather = () => {
 
   return (
     <div className="weather">
+      {isLoading && (
+        <div className="loading-overlay">
+          <img src="/assets/global.gif" alt="Loading..." />
+        </div>
+      )}
       <div className="detailed-div">
         <div className="search-bar">
           <input
@@ -134,19 +179,16 @@ const Weather = () => {
           <div className="hourly-data-table">
             <div className="h-data">
               <p>Now</p>
-              <span>28°</span><br/>
-              <img src={clearIcon} alt="" />
+              <img src={weatherData.icon} alt="" />
+              <p>{weatherData.temperature}°</p>
             </div>
-            <div className="h-data">
-              <p>Now</p>
-              <span>28°</span><br/>
-              <img src={clearIcon} alt="" />
-            </div>
-            <div className="h-data">
-              <p>Now</p>
-              <span>28°</span><br/>
-              <img src={clearIcon} alt="" />
-            </div>
+            {upcomingForecast.map((item, index) => (
+              <div className="h-data" key={index}>
+                <p>{item.time.split(" ")[1]}</p>
+                <img src={item.condition.icon} alt={item.condition.text} />
+                <p>{item.temp_c}°</p>
+              </div>
+            ))}
           </div>
         </div>
         <div className="days-div">
@@ -155,21 +197,41 @@ const Weather = () => {
             <p>10 Day FORECAST</p>
           </div>
           <div className="hourly-data-table">
-            <div className="h-data">
-              <p>Now</p>
-              <span>28°</span><br/>
-              <img src={clearIcon} alt="" />
-            </div>
-            <div className="h-data">
-              <p>Now</p>
-              <span>28°</span><br/>
-              <img src={clearIcon} alt="" />
-            </div>
-            <div className="h-data">
-              <p>Now</p>
-              <span>28°</span><br/>
-              <img src={clearIcon} alt="" />
-            </div>
+            {tenDaysForecast.map((day, index) => {
+              const today = new Date();
+              const tomorrow = new Date();
+              tomorrow.setDate(today.getDate() + 1);
+
+              const pad = (n) => n.toString().padStart(2, "0");
+              const formatDate = (d) =>
+                `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(
+                  d.getDate()
+                )}`;
+              const todayStr = formatDate(today);
+              const tomorrowStr = formatDate(tomorrow);
+
+              let label;
+              if (day.date === todayStr) {
+                label = "Today";
+              } else if (day.date === tomorrowStr) {
+                label = "Tomorrow";
+              } else {
+                label = new Date(day.date).toLocaleDateString("en-us", {
+                  weekday: "short",
+                });
+              }
+
+              return (
+                <div className="h-data" key={index}>
+                  <p>{label}</p>
+                  <img
+                    src={day.day.condition.icon}
+                    alt={day.day.condition.text}
+                  />
+                  <p>{day.day.avgtemp_c}°</p>
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>
